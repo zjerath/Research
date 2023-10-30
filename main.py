@@ -77,6 +77,7 @@ num_epochs = 5  # adjust as needed
 for epoch in range(num_epochs):
     age_model.train()
     total_loss = 0
+    total_examples = 0
     for batch in train_dataloader:
         optimizer.zero_grad()
         input_ids, attention_mask, labels = batch
@@ -85,20 +86,23 @@ for epoch in range(num_epochs):
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-    avg_loss = total_loss / input_ids.shape[0] # keep?
+        total_examples += input_ids.shape[0]
+    avg_loss = total_loss / total_examples
     # avg_loss = total_loss / len(train_dataloader)
 
     # validation
     age_model.eval()
     val_loss = 0
+    val_examples = 0
     predictions = []
     with torch.no_grad():
         for batch in val_dataloader:
             input_ids, attention_mask, labels = batch
             output = age_model(input_ids, attention_mask)
             val_loss += criterion(output, labels).item()
+            val_examples += input_ids.shape[0]
             predictions.extend(output.tolist())
-    avg_val_loss = val_loss / input_ids.shape[0] # keep?
+    avg_val_loss = val_loss / val_examples
     # avg_val_loss = val_loss / len(val_dataloader)
 
     # calculate validation metrics
