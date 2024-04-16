@@ -101,7 +101,7 @@ val_dataloader = DataLoader(val_data, batch_size=16)
 # learning rate / hidden size loops
 
 # Define ranges for learning rates and hidden layer sizes to try
-learning_rates = [0.0001, 0.001, 0.01]
+learning_rates = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1]
 hidden_layer_sizes = [256, 512, 1024]
 
 # Prepare a DataFrame to store results
