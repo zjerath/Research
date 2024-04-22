@@ -77,7 +77,7 @@ print(f"Number of trainable parameters: {parameter_count}")
 
 # define loss and optimizer
 criterion = nn.MSELoss()  # mean squared error for regression
-optimizer = optim.Adam(age_model.parameters(), lr=0.0001)
+optimizer = optim.Adam(age_model.parameters(), lr=0.01)
 
 # convert data to PyTorch tensors
 X_train_subject_ids = torch.tensor(X_train['subject_id'].values, dtype=int)
@@ -98,7 +98,7 @@ train_dataloader = DataLoader(train_data, batch_size=16, shuffle=True)
 val_data = TensorDataset(X_val_subject_ids, X_val_ids, X_val_mask, y_val)
 val_dataloader = DataLoader(val_data, batch_size=16)
 
-# learning rate / hidden size loops
+'''# learning rate / hidden size loops
 
 # Define ranges for learning rates and hidden layer sizes to try
 learning_rates = [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1]
@@ -159,10 +159,10 @@ for lr in learning_rates:
             results_df = pd.concat([results_df, pd.DataFrame([row])], ignore_index=True)
 
 # Export results to CSV
-results_df.to_csv('results.csv', index=False)
+results_df.to_csv('results.csv', index=False)'''
 
 # training loop
-'''num_epochs = 10
+num_epochs = 20
 for epoch in range(num_epochs):
     age_model.train()
     total_loss = 0
@@ -204,7 +204,7 @@ for epoch in range(num_epochs):
 
     print(f"Epoch {epoch+1}/{num_epochs}: Train RMSE: {train_rmse:.4f}, Val RMSE: {val_rmse:.4f}")
 
-print("Train Subject Ids | Train Predictions | Val True Ages")
+print("Train Subject Ids | Train Predictions | Train True Ages")
 for sub_id, pred, true_age in zip(train_subject_ids, train_predictions, train_true_labels):
     print(f"{sub_id} | {pred:.4f} | {true_age:.4f}")
 
@@ -243,7 +243,7 @@ print(f"Test RMSE: {test_rmse:.4f}")
 
 print("Test Subject Ids | Test Predictions | Test True Ages")
 for sub_id, pred, true_age in zip(test_subject_ids, test_predictions, test_true_labels):
-    print(f"{sub_id} | {pred:.4f} | {true_age:.4f}")'''
+    print(f"{sub_id} | {pred:.4f} | {true_age:.4f}")
 
 # save the trained model weights for future use
 #torch.save(age_model.state_dict(), 'age_prediction_model.pth')
