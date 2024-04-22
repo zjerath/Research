@@ -14,8 +14,11 @@ def load_data():
     # convert notes to string
     discharge['notes'] = discharge['notes'].astype(str)
 
+    # filter patient to only include subject IDs present in discharge
+    patients = patients[patients['subject_id'].isin(discharge['subject_id'])]
+
     # join on SUBJECT_ID
-    merged_df = patients.join(discharge.set_index('subject_id'), on='subject_id')
+    merged_df = patients.merge(discharge, on='subject_id', how='inner')
 
     return merged_df
 
