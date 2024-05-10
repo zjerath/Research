@@ -32,7 +32,8 @@ X_test['notes'] = X_test['notes'].fillna('')
 
 # initialize clinical BERT tokenizer and model
 tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
-model = AutoModel.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+# model = AutoModel.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+model = AutoModel.from_pretrained("emilyalsentzer/Bio_ClinicalBERT", output_hidden_states=True)
 
 # tokenize and encode text
 X_train_encoded = tokenizer(list(X_train['notes']), padding=True, truncation=True, return_tensors="pt", max_length=512)
@@ -41,9 +42,10 @@ X_val_encoded = tokenizer(list(X_val['notes']), padding=True, truncation=True, r
 # output = model(input_ids=X_train_encoded['input_ids'][0].unsqueeze(0), attention_mask=X_train_encoded['attention_mask'][0].unsqueeze(0))
 
 class AgePredictionModel(nn.Module):
-    def __init__(self, bert_model):
+    def __init__(self, bert_model, layer_num):
         super(AgePredictionModel, self).__init__()
         self.bert = bert_model
+        self.layer_num = layer_num
         for param in self.bert.parameters():
             param.requires_grad = False  # Freezing gradients for BERT
         # decrease complexity -> dropout
@@ -56,12 +58,17 @@ class AgePredictionModel(nn.Module):
 
     def forward(self, input_ids, attention_mask):
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
-        pooler_output = outputs.pooler_output
+        hidden_states = outputs.hidden_states
+        layer_output = hidden_states[self.layer_num]
+        # For multiple layers no lower level:
+        # pooler_output = outputs.pooler_output
+        # For one layer:
         # age_prediction = self.fc(pooler_output)
         # return age_prediction.view(-1)
 
         # pass through layers
-        x = self.fc1(pooler_output)
+        x = self.fc1(layer_output[:, 0])
+        # x = self.fc1(pooler_output)
         x = self.relu(x)
         x = self.fc2(x)
         x = self.relu2(x)
@@ -70,7 +77,7 @@ class AgePredictionModel(nn.Module):
         return age_prediction
 
 # instantiate the model
-age_model = AgePredictionModel(model)
+age_model = AgePredictionModel(model, layer_num=10)
 
 parameter_count = sum(p.numel() for p in age_model.parameters() if p.requires_grad)
 print(f"Number of trainable parameters: {parameter_count}")
