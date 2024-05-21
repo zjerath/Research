@@ -24,7 +24,10 @@ X = preprocessed_data[['subject_id', 'notes']]
 y = preprocessed_data['anchor_age']
 
 # subset for faster training
-subset_size = 1000
+subset_size = None
+num_epochs = 100
+hidden_size = 32
+lr = 1e-2
 # for whole training dataset: X_train, X_val, X_test, y_train, y_val, y_test = split_data(X, y)
 X_train, X_val, X_test, y_train, y_val, y_test = split_data(X[:subset_size], y[:subset_size]) # for subset
 
@@ -41,11 +44,22 @@ X_test['notes'] = X_test['notes'].fillna('')
 tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
 model = AutoModel.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
 
+import pdb; pdb.set_trace()
+
 # tokenize and encode text
 X_train_encoded = tokenizer(list(X_train['notes']), padding=True, truncation=True, return_tensors="pt", max_length=512)
 X_val_encoded = tokenizer(list(X_val['notes']), padding=True, truncation=True, return_tensors="pt", max_length=512)
 
 output = model(input_ids=X_train_encoded['input_ids'][0].unsqueeze(0), attention_mask=X_train_encoded['attention_mask'][0].unsqueeze(0))
+
+
+# val_encodings = []
+# for i in range(X_val.shape[0]):
+#     tmp = model(
+#         input_ids=X_val_encoded['input_ids'][i].unsqueeze(0),
+#         attention_mask=X_val_encoded['attention_mask'][i].unsqueeze(0))
+#     val_encodings.append(tmp.pooler_output)
+# val_encodings = torch.cat(val_encodings, dim=0)
 
 class AgePredictionModel(nn.Module):
     def __init__(self, bert_model, hidden_layer_size=256):
@@ -80,17 +94,19 @@ class AgePredictionModel(nn.Module):
         age_prediction = x.squeeze(-1)
         return age_prediction
 
-device = "cuda:0"
+# device = "cuda:0"
+device = "cpu"
 
 # instantiate the model
-age_model = AgePredictionModel(model).to(device)
+age_model = AgePredictionModel(model, hidden_layer_size=hidden_size).to(device)
 
 parameter_count = sum(p.numel() for p in age_model.parameters() if p.requires_grad)
 print(f"Number of trainable parameters: {parameter_count}")
 
 # define loss and optimizer
 criterion = nn.MSELoss()  # mean squared error for regression
-optimizer = optim.Adam(age_model.parameters(), lr=0.01)
+optimizer = optim.Adam(age_model.parameters(), lr=lr)
+# optimizer = optim.SGD(age_model.parameters(), lr=lr)
 
 # convert data to PyTorch tensors
 X_train_subject_ids = torch.tensor(X_train['subject_id'].values, dtype=int).to(device)
@@ -175,7 +191,6 @@ val_dataloader = DataLoader(val_data, batch_size=16)
 # results_df.to_csv('results.csv', index=False)
 
 # training loop
-num_epochs = 5
 for epoch in range(num_epochs):
     age_model.train()
     total_loss = 0
@@ -215,7 +230,8 @@ for epoch in range(num_epochs):
             val_true_labels.extend(labels.tolist())
     val_rmse = sqrt(val_loss / val_examples)
 
-    print(f"Epoch {epoch+1}/{num_epochs}: Train RMSE: {train_rmse:.4f}, Val RMSE: {val_rmse:.4f}")
+    if (epoch + 1) % (num_epochs // 10) == 0:
+        print(f"Epoch {epoch+1}/{num_epochs}: Train RMSE: {train_rmse:.2f}, Val RMSE: {val_rmse:.2f}")
 
 # print("Train Subject Ids | Train Predictions | Val True Ages")
 # for sub_id, pred, true_age in zip(train_subject_ids, train_predictions, train_true_labels):
