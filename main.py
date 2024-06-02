@@ -6,8 +6,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from math import sqrt
-import numpy as np
-import pandas as pd
 
 # load and preprocess data
 preprocessed_data = load_data()
@@ -32,8 +30,8 @@ X_test['notes'] = X_test['notes'].fillna('')
 
 # initialize clinical BERT tokenizer and model
 tokenizer = AutoTokenizer.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
-# model = AutoModel.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
-model = AutoModel.from_pretrained("emilyalsentzer/Bio_ClinicalBERT", output_hidden_states=True)
+model = AutoModel.from_pretrained("emilyalsentzer/Bio_ClinicalBERT")
+# model = AutoModel.from_pretrained("emilyalsentzer/Bio_ClinicalBERT", output_hidden_states=True)
 
 # tokenize and encode text
 X_train_encoded = tokenizer(list(X_train['notes']), padding=True, truncation=True, return_tensors="pt", max_length=512)
@@ -41,11 +39,34 @@ X_val_encoded = tokenizer(list(X_val['notes']), padding=True, truncation=True, r
 
 # output = model(input_ids=X_train_encoded['input_ids'][0].unsqueeze(0), attention_mask=X_train_encoded['attention_mask'][0].unsqueeze(0))
 
+'''def pass_through_k_layers(input_ids, attention_mask, k):
+    tmp = model._modules["embeddings"](input_ids=input_ids)
+    assert 1 <= k <= 12
+    for i in range(k):
+        tmp = model._modules["encoder"]._modules['layer'][i](
+            tmp,
+            attention_mask=attention_mask
+        )[0]
+
+    return tmp'''
+
+def pass_through_k_layers(input_ids, attention_mask, k):
+    tmp = model._modules["embeddings"](input_ids=input_ids)
+    assert 1 <= k <= 12
+    extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+    extended_attention_mask = extended_attention_mask.to(dtype=tmp.dtype)
+    extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+    
+    for i in range(k):
+        layer_module = model._modules["encoder"]._modules['layer'][i]
+        tmp = layer_module(tmp, attention_mask=extended_attention_mask)[0]
+
+    return tmp
+
 class AgePredictionModel(nn.Module):
-    def __init__(self, bert_model, layer_num):
+    def __init__(self, bert_model):
         super(AgePredictionModel, self).__init__()
         self.bert = bert_model
-        self.layer_num = layer_num
         for param in self.bert.parameters():
             param.requires_grad = False  # Freezing gradients for BERT
         # decrease complexity -> dropout
@@ -56,10 +77,8 @@ class AgePredictionModel(nn.Module):
         self.relu2 = nn.ReLU()
         self.fc3 = nn.Linear(256, 1)
 
-    def forward(self, input_ids, attention_mask):
-        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
-        hidden_states = outputs.hidden_states
-        layer_output = hidden_states[self.layer_num]
+    def forward(self, input_ids, attention_mask, k=6):
+        hidden_states = pass_through_k_layers(input_ids, attention_mask, k)
         # For multiple layers no lower level:
         # pooler_output = outputs.pooler_output
         # For one layer:
@@ -67,7 +86,7 @@ class AgePredictionModel(nn.Module):
         # return age_prediction.view(-1)
 
         # pass through layers
-        x = self.fc1(layer_output[:, 0])
+        x = self.fc1(hidden_states[:, 0])
         # x = self.fc1(pooler_output)
         x = self.relu(x)
         x = self.fc2(x)
@@ -77,7 +96,7 @@ class AgePredictionModel(nn.Module):
         return age_prediction
 
 # instantiate the model
-age_model = AgePredictionModel(model, layer_num=10)
+age_model = AgePredictionModel(model)
 
 parameter_count = sum(p.numel() for p in age_model.parameters() if p.requires_grad)
 print(f"Number of trainable parameters: {parameter_count}")
@@ -180,7 +199,7 @@ for epoch in range(num_epochs):
     for batch in train_dataloader:
         optimizer.zero_grad()
         subject_ids, input_ids, attention_mask, labels = batch
-        output = age_model(input_ids, attention_mask)
+        output = age_model(input_ids, attention_mask, k=6)
         loss = criterion(output, labels)
         loss.backward()
         optimizer.step()
@@ -201,7 +220,7 @@ for epoch in range(num_epochs):
     with torch.no_grad():
         for batch in val_dataloader:
             subject_ids, input_ids, attention_mask, labels = batch
-            output = age_model(input_ids, attention_mask)
+            output = age_model(input_ids, attention_mask, k=6)
             val_loss += criterion(output, labels).item()
             val_examples += input_ids.shape[0]
             val_subject_ids.extend(subject_ids.tolist())
@@ -238,7 +257,7 @@ test_true_labels = []
 with torch.no_grad():
     for batch in test_dataloader:
         subject_ids, input_ids, attention_mask, labels = batch
-        output = age_model(input_ids, attention_mask)
+        output = age_model(input_ids, attention_mask, k=6)
         test_loss += criterion(output, labels).item()
         test_examples += input_ids.shape[0]
         test_subject_ids.extend(subject_ids.tolist())
